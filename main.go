@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/blackviking27/validate-idea-cli/agents"
 	"github.com/blackviking27/validate-idea-cli/providers"
@@ -14,6 +15,7 @@ import (
 
 var (
 	providerArg string
+	aiModel     string
 )
 
 func getAiProvider(ctx context.Context) *providers.AIProvider {
@@ -40,15 +42,25 @@ func runValidateCommand(cmd *cobra.Command, args []string) string {
 	// Initiating ai provider
 	aiProvider := getAiProvider(ctx)
 
-	fmt.Printf("🔍 Analyzing idea with %s...\n\n", (*aiProvider).Name())
-
 	result, err := agents.RunValidator(ctx, aiProvider, userIdea)
 	if err != nil {
 		log.Fatalf("Validation failed : %v", err)
 	}
 
 	return result
+}
 
+func saveReport(content string) error {
+	fileName := fmt.Sprintf("report_%s.md", time.Now().Format("20060102150405"))
+
+	err := os.WriteFile(fileName, []byte(content), 0644)
+	if err != nil {
+		fmt.Printf("Unable to dump report to file")
+		return err
+	}
+
+	fmt.Println("Successfully dumped report to ", fileName)
+	return nil
 }
 
 func main() {
@@ -62,12 +74,17 @@ func main() {
 		Args: cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			result := runValidateCommand(cmd, args)
-			fmt.Println(result)
+			err := saveReport(result)
+			if err != nil {
+				fmt.Println("Dumping report here...\n\n")
+				fmt.Println(result)
+			}
 		},
 	}
 
 	//adding flags
 	rootCmd.PersistentFlags().StringVarP(&providerArg, "provider", "p", "", "AI model provider")
+	rootCmd.PersistentFlags().StringVarP(&aiModel, "model", "m", "", "AI model to use")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

@@ -26,8 +26,7 @@ func NewOllamaProvider(ctx context.Context) (*OllamaProvider, error) {
 		return nil, fmt.Errorf("No ollama host defined in environment")
 	}
 
-	fmt.Println("Calling the model")
-	client, err := ollama.New(ollama.WithServerURL(ollamaHost), ollama.WithModel("qwen3:8b"))
+	client, err := ollama.New(ollama.WithServerURL(ollamaHost), ollama.WithModel("gemma4:e2b"))
 	if err != nil {
 		return nil, err
 	}
