@@ -13,6 +13,12 @@ import (
 	"github.com/blackviking27/validate-idea-cli/tools"
 )
 
+type ValidationResult struct {
+	EnhancedIdea string
+	AuditReport  string
+	GrowthReport string
+}
+
 func renderTemplate(path string, data interface{}) (string, error) {
 	templateContent, err := os.ReadFile(path)
 	if err != nil {
@@ -47,7 +53,10 @@ func generateAIReadyPostResult(results []tools.ParsedSearchResult) string {
 	return parsedResult.String()
 }
 
-func RunValidator(ctx context.Context, aiModel *providers.AIProvider, userIdea string) (string, error) {
+func RunValidator(ctx context.Context, aiModel *providers.AIProvider, userIdea string) (ValidationResult, error) {
+	validationResult := ValidationResult{}
+
+	// --- PHASE 1: Summary ---
 	// Generating user idea
 	fmt.Printf("🔍 Analyzing idea with %s...\n\n", (*aiModel).Name())
 	enhanceIdeaPrompt, err := renderTemplate("prompts/generate-idea.txt", struct{ Idea string }{Idea: userIdea})
@@ -57,26 +66,28 @@ func RunValidator(ctx context.Context, aiModel *providers.AIProvider, userIdea s
 
 	enhancedIdea, err := (*aiModel).Generate(ctx, enhanceIdeaPrompt)
 	if err != nil {
-		return "", err
+		return validationResult, err
 	}
+	validationResult.EnhancedIdea = enhancedIdea
 
+	// --- PHASE 2: Reddit Search & Audit ---
 	// Running the platform validation
 	fmt.Println("\n\n🌐 Searching Reddit for community feedback...")
 	searchQuery, err := (*aiModel).Generate(ctx, fmt.Sprintf("Generate a short 3 word search query for Reddit to find if people need: %s", enhancedIdea))
 	if err != nil || searchQuery == "" {
-		return "", fmt.Errorf("Unable to generate search query, err: %v", err)
+		return validationResult, fmt.Errorf("Unable to generate search query, err: %v", err)
 	}
 
 	redditSearch := tools.NewRedditSearch()
 	searchResults, err := redditSearch.Search(ctx, searchQuery)
 	if err != nil {
-		return "", fmt.Errorf("Search failed for query: %v", searchQuery)
+		return validationResult, fmt.Errorf("Search failed for query: %v", searchQuery)
 	}
 
 	aiReadyPostResult := generateAIReadyPostResult(searchResults)
 
 	// Generating audit report
-	fmt.Println("\n\n📄 Generating audit report...")
+	fmt.Println("\n\nGenerating audit report...")
 	auditPrompt, err := renderTemplate("prompts/research-prompt.txt", struct {
 		Idea    string
 		Results string
@@ -84,8 +95,22 @@ func RunValidator(ctx context.Context, aiModel *providers.AIProvider, userIdea s
 
 	auditResult, err := (*aiModel).Generate(ctx, auditPrompt)
 	if err != nil {
-		return "", fmt.Errorf("Unable to generate audit report, err: %v", err)
+		return validationResult, fmt.Errorf("Unable to generate audit report, err: %v", err)
 	}
+	validationResult.AuditReport = auditResult
 
-	return auditResult, nil
+	// --- PHASE 3 & 4: Keywords & Discovery ---
+	fmt.Println("📈 Generating discovery strategy & keywords...")
+	growthPrompt, _ := renderTemplate("prompts/growth_stratergy.txt", struct {
+		Summary string
+		Audit   string
+	}{Summary: enhancedIdea, Audit: auditResult})
+	growthReport, err := (*aiModel).Generate(ctx, growthPrompt)
+	if err != nil {
+		fmt.Println("Unable to generate growth report", err)
+		return validationResult, err
+	}
+	validationResult.GrowthReport = growthReport
+
+	return validationResult, nil
 }

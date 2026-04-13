@@ -35,7 +35,7 @@ func getAiProvider(ctx context.Context) *providers.AIProvider {
 	return &currProivder
 }
 
-func runValidateCommand(cmd *cobra.Command, args []string) string {
+func runValidateCommand(cmd *cobra.Command, args []string) agents.ValidationResult {
 	ctx := context.Background()
 	userIdea := args[0]
 
@@ -50,16 +50,20 @@ func runValidateCommand(cmd *cobra.Command, args []string) string {
 	return result
 }
 
-func saveReport(content string) error {
+func saveReport(content agents.ValidationResult) error {
+
+	fmt.Println("[DEBUG] Dumping the below content to file", content)
+
 	fileName := fmt.Sprintf("report_%s.md", time.Now().Format("20060102150405"))
 
-	err := os.WriteFile(fileName, []byte(content), 0644)
+	err := os.WriteFile(fileName, []byte(fmt.Sprintf("# Validation Report: %s\n\n%s\n\n----\n# Growth & Discovery\n%s",
+		content.EnhancedIdea, content.AuditReport, content.GrowthReport)), 0644)
 	if err != nil {
 		fmt.Printf("Unable to dump report to file")
 		return err
 	}
 
-	fmt.Println("Successfully dumped report to ", fileName)
+	fmt.Println("\n\n\nSuccessfully dumped report to ", fileName)
 	return nil
 }
 
