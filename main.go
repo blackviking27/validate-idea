@@ -18,29 +18,31 @@ var (
 	aiModel     string
 )
 
-func getAiProvider(ctx context.Context) *providers.AIProvider {
+func getAiProvider(ctx context.Context, config ValidationConfig) *providers.AIProvider {
 	var currProivder providers.AIProvider
 
-	switch providerArg {
+	switch config.Provider {
+	case "Gemini":
 	case "gemini":
 		currProivder, _ = providers.NewGeminiProvider(ctx)
 	case "ollama":
+	case "Ollama":
 		currProivder, _ = providers.NewOllamaProvider(ctx)
 	}
 
 	if currProivder == nil {
-		log.Fatal("Not a valid AI provider provided")
+		log.Fatal("Not a valid AI provider provided: ", config.Provider)
 	}
 
 	return &currProivder
 }
 
-func runValidateCommand(cmd *cobra.Command, args []string) agents.ValidationResult {
+func runValidateCommand(cmd *cobra.Command, config ValidationConfig) agents.ValidationResult {
 	ctx := context.Background()
-	userIdea := args[0]
+	userIdea := config.Idea
 
 	// Initiating ai provider
-	aiProvider := getAiProvider(ctx)
+	aiProvider := getAiProvider(ctx, config)
 
 	result, err := agents.RunValidator(ctx, aiProvider, userIdea)
 	if err != nil {
@@ -51,8 +53,6 @@ func runValidateCommand(cmd *cobra.Command, args []string) agents.ValidationResu
 }
 
 func saveReport(content agents.ValidationResult) error {
-
-	fmt.Println("[DEBUG] Dumping the below content to file", content)
 
 	fileName := fmt.Sprintf("report_%s.md", time.Now().Format("20060102150405"))
 
@@ -75,20 +75,29 @@ func main() {
 		Short: "A tool to validate your ideas",
 		Long: `A tool that helps you validate your business idea or personnel project
 	 		to help you understand if it worth building or not and what your competitors are in the sapcve`,
-		Args: cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
-			result := runValidateCommand(cmd, args)
-			err := saveReport(result)
+
+			// 1. Launch Bubble Tea Form
+			config, err := RunForm()
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(0)
+			}
+
+			// 2. Clear output and show selections
+			fmt.Printf("🚀 Idea:      %s\n", config.Idea)
+			fmt.Printf("🔌 Provider:  %s\n", config.Provider)
+			fmt.Printf("🧠 Model:     %s\n", config.Model)
+			fmt.Println("--------------------------------------------------")
+
+			result := runValidateCommand(cmd, config)
+			err = saveReport(result)
 			if err != nil {
 				fmt.Println("Dumping report here...\n\n")
 				fmt.Println(result)
 			}
 		},
 	}
-
-	//adding flags
-	rootCmd.PersistentFlags().StringVarP(&providerArg, "provider", "p", "", "AI model provider")
-	rootCmd.PersistentFlags().StringVarP(&aiModel, "model", "m", "", "AI model to use")
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
