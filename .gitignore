@@ -2,3 +2,5 @@
 .env*
 *debug*
 *report*
+
+!.env.example
