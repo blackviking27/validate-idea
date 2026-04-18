@@ -24,10 +24,10 @@ func getAiProvider(ctx context.Context, config ValidationConfig) *providers.AIPr
 	switch config.Provider {
 	case "Gemini":
 	case "gemini":
-		currProivder, _ = providers.NewGeminiProvider(ctx)
+		currProivder, _ = providers.NewGeminiProvider(ctx, config.Model)
 	case "ollama":
 	case "Ollama":
-		currProivder, _ = providers.NewOllamaProvider(ctx)
+		currProivder, _ = providers.NewOllamaProvider(ctx, config.Model)
 	}
 
 	if currProivder == nil {

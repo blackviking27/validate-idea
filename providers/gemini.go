@@ -21,13 +21,13 @@ func (this *GeminiProvider) Generate(ctx context.Context, prompt string) (string
 	return llms.GenerateFromSinglePrompt(ctx, this.client, prompt)
 }
 
-func NewGeminiProvider(ctx context.Context) (*GeminiProvider, error) {
+func NewGeminiProvider(ctx context.Context, model string) (*GeminiProvider, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY not found in environment")
 	}
 
-	client, err := googleai.New(ctx, googleai.WithAPIKey(apiKey))
+	client, err := googleai.New(ctx, googleai.WithAPIKey(apiKey), googleai.WithDefaultModel(model))
 	if err != nil {
 		return nil, err
 	}

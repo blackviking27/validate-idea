@@ -19,14 +19,14 @@ func (this *OllamaProvider) Generate(ctx context.Context, prompt string) (string
 	return llms.GenerateFromSinglePrompt(ctx, this.client, prompt)
 }
 
-func NewOllamaProvider(ctx context.Context) (*OllamaProvider, error) {
+func NewOllamaProvider(ctx context.Context, model string) (*OllamaProvider, error) {
 	ollamaHost := os.Getenv("OLLAMA_HOST")
 
 	if ollamaHost == "" {
 		return nil, fmt.Errorf("No ollama host defined in environment")
 	}
 
-	client, err := ollama.New(ollama.WithServerURL(ollamaHost), ollama.WithModel("gemma4:e2b"))
+	client, err := ollama.New(ollama.WithServerURL(ollamaHost), ollama.WithModel(model))
 	if err != nil {
 		return nil, err
 	}

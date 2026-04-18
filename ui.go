@@ -16,10 +16,10 @@ const (
 	stateIdea formState = iota
 	stateProvider
 	stateModel
+	stateCustomModel // 1. Added a new state for typing the custom model
 	stateDone
 )
 
-// Data structure to hold the user's answers
 type ValidationConfig struct {
 	Idea     string
 	Provider string
@@ -27,19 +27,18 @@ type ValidationConfig struct {
 }
 
 // Data definitions for the menus
-var aiProviders = []string{"Gemini", "OpenAI", "Ollama"}
+var aiProviders = []string{"Gemini", "Ollama"}
 var defaultModels = map[string]string{
 	"Gemini": "gemini-1.5-flash",
-	"OpenAI": "gpt-4o-mini",
 	"Ollama": "llama3",
 }
+
+// 2. Added "Enter Custom Model..." to the end of each list
 var modelsList = map[string][]string{
-	"Gemini": {"gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"},
-	"OpenAI": {"gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"},
-	"Ollama": {"llama3", "mistral", "phi3"},
+	"Gemini": {"gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro", "Enter Custom Model..."},
+	"Ollama": {"llama3", "mistral", "phi3", "Enter Custom Model..."},
 }
 
-// Styling
 var (
 	titleStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("62")).Bold(true).MarginBottom(1)
 	cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
@@ -47,25 +46,33 @@ var (
 )
 
 type tuiModel struct {
-	state     formState
-	ideaInput textinput.Model
-	cursor    int
-	config    ValidationConfig
-	quitting  bool
+	state      formState
+	ideaInput  textinput.Model
+	modelInput textinput.Model // 3. Added a second text input for the model
+	cursor     int
+	config     ValidationConfig
+	quitting   bool
 }
 
-// Initialize the form
 func initialModel() tuiModel {
-	ti := textinput.New()
-	ti.Placeholder = "e.g., A peer-to-peer motorcycle rental app..."
-	ti.Focus()
-	ti.CharLimit = 256
-	ti.Width = 60
+	// Setup Idea Input
+	ideaTi := textinput.New()
+	ideaTi.Placeholder = "e.g., A peer-to-peer motorcycle rental app..."
+	ideaTi.Focus()
+	ideaTi.CharLimit = 256
+	ideaTi.Width = 60
+
+	// Setup Custom Model Input
+	modelTi := textinput.New()
+	modelTi.Placeholder = "e.g., llama3:8b-instruct-fp16"
+	modelTi.CharLimit = 64
+	modelTi.Width = 40
 
 	return tuiModel{
-		state:     stateIdea,
-		ideaInput: ti,
-		cursor:    0,
+		state:      stateIdea,
+		ideaInput:  ideaTi,
+		modelInput: modelTi,
+		cursor:     0,
 	}
 }
 
@@ -82,14 +89,13 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		// State Machine Logic
 		switch m.state {
 		case stateIdea:
 			if msg.String() == "enter" {
 				if strings.TrimSpace(m.ideaInput.Value()) != "" {
 					m.config.Idea = m.ideaInput.Value()
 					m.state = stateProvider
-					m.cursor = 0 // Reset cursor for next menu
+					m.cursor = 0
 				}
 				return m, nil
 			}
@@ -112,7 +118,6 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = stateModel
 				m.cursor = 0
 
-				// Pre-select the default model index
 				defModel := defaultModels[m.config.Provider]
 				for i, mod := range modelsList[m.config.Provider] {
 					if mod == defModel {
@@ -134,11 +139,34 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor++
 				}
 			case "enter":
-				m.config.Model = currentModels[m.cursor]
+				selection := currentModels[m.cursor]
+
+				// 4. Logic routing: Are we using a preset or going custom?
+				if selection == "Enter Custom Model..." {
+					m.state = stateCustomModel
+					m.modelInput.Focus()
+					return m, textinput.Blink
+				}
+
+				m.config.Model = selection
 				m.state = stateDone
 				m.quitting = true
 				return m, tea.Quit
 			}
+
+		// 5. Handle the new custom text input state
+		case stateCustomModel:
+			if msg.String() == "enter" {
+				if strings.TrimSpace(m.modelInput.Value()) != "" {
+					m.config.Model = m.modelInput.Value()
+					m.state = stateDone
+					m.quitting = true
+					return m, tea.Quit
+				}
+			}
+			var cmd tea.Cmd
+			m.modelInput, cmd = m.modelInput.Update(msg)
+			return m, cmd
 		}
 	}
 	return m, nil
@@ -146,7 +174,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m tuiModel) View() string {
 	if m.quitting && m.state == stateDone {
-		return "" // Clear the screen when returning to main execution
+		return ""
 	}
 	if m.quitting {
 		return "Form aborted.\n"
@@ -169,7 +197,6 @@ func (m tuiModel) View() string {
 			if m.cursor == i {
 				cursor = cursorStyle.Render("❯ ")
 			}
-			// Show default model next to provider
 			defaultHint := hintStyle.Render(fmt.Sprintf("(Default: %s)", defaultModels[choice]))
 			s.WriteString(fmt.Sprintf("%s%s %s\n", cursor, choice, defaultHint))
 		}
@@ -185,12 +212,18 @@ func (m tuiModel) View() string {
 			}
 			s.WriteString(fmt.Sprintf("%s%s\n", cursor, choice))
 		}
+		s.WriteString("\n" + hintStyle.Render("(Use arrow keys and Enter)"))
+
+	case stateCustomModel:
+		s.WriteString(titleStyle.Render("⌨️  Type the exact model name:"))
+		s.WriteString("\n")
+		s.WriteString(m.modelInput.View())
+		s.WriteString("\n\n" + hintStyle.Render("(Press Enter to save)"))
 	}
 
 	return "\n" + s.String() + "\n"
 }
 
-// RunForm is the public function to launch the TUI
 func RunForm() (ValidationConfig, error) {
 	p := tea.NewProgram(initialModel())
 	m, err := p.Run()
